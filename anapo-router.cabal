@@ -1,0 +1,87 @@
+name:                anapo-router
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/chpatrick/anapo-router#readme
+license:             MIT
+license-file:        LICENSE
+author:              Patrick Chilton
+maintainer:          chpatrick@gmail.com
+copyright:           2017 Patrick Chilton
+category:            Web
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Anapo.Router
+  build-depends:       base >= 4.7 && < 5,
+                       anapo,
+                       lens,
+                       ghcjs-base,
+                       ghcjs-dom,
+                       unordered-containers,
+                       exceptions
+  default-language:    Haskell2010
+  ghc-options: -Wall
+  default-extensions:
+    BangPatterns
+    ConstraintKinds
+    ExistentialQuantification
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    MultiParamTypeClasses
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StaticPointers
+    StrictData
+    TemplateHaskell
+    TupleSections
+    TypeFamilies
+    NamedFieldPuns
+    TypeOperators
+
+executable test-app
+  hs-source-dirs: app
+  main-is: Main.hs
+  ghc-options: -Wall
+  cpp-options: -DGHCJS_BROWSER
+  build-depends:
+    base,
+    anapo,
+    anapo-router,
+    text,
+    ghcjs-base
+  default-language: Haskell2010
+  default-extensions:
+    BangPatterns
+    ConstraintKinds
+    ExistentialQuantification
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    MultiParamTypeClasses
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StaticPointers
+    StrictData
+    TemplateHaskell
+    TupleSections
+    TypeFamilies
+    NamedFieldPuns
+    StandaloneDeriving
+    DeriveGeneric
+
+source-repository head
+  type:     git
+  location: https://github.com/chpatrick/anapo-router

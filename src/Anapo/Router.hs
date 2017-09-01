@@ -14,8 +14,14 @@ module Anapo.Router
 
   , Path
   , PathSegments
+  , PathIn(..)
   , Router(..)
   , Abbreviated(..)
+  , HasLink(..)
+  , fieldLink
+  , rootLink
+  , toPath
+
   , End(..)
   , Seg(..)
   , Capture(..)
@@ -35,6 +41,7 @@ import Data.Foldable
 import Data.IORef
 import Data.Maybe
 import Data.Proxy
+import Data.Monoid
 import GHC.Generics
 import GHC.TypeLits
 import qualified Data.JSString as JSString
@@ -62,11 +69,32 @@ type PathSegments= [ JSString.JSString ]
 
 type RouteComponent r = Component' (RouteState r)
 
+newtype PathIn in_ = PathIn PathSegments
+
+toPath :: PathIn in_ -> Path
+toPath (PathIn segs) = mconcat $ map ("/"<>) segs
+
 class Router r where
   type RouteState r :: *
   tryRoute :: PathSegments -> Maybe (r -> RouteComponent r)
   default tryRoute :: (Generic r, Router (Rep r ()), RouteState (Rep r ()) ~ RouteState r) => PathSegments -> Maybe (r -> RouteComponent r)
   tryRoute = tryRouteNext (\router -> GHC.Generics.from router :: Rep r ())
+
+class HasLink r where
+  type MkLink in_ r :: *
+  type instance MkLink in_ r = PathIn r -> PathIn in_
+  mkLink :: proxy r -> proxy' in_ -> Endo PathSegments -> MkLink in_ r
+  default mkLink :: (MkLink in_ r ~ (PathIn r -> PathIn in_)) => proxy r -> proxy' in_ -> Endo PathSegments -> MkLink in_ r
+  mkLink _ _ segs (PathIn path) = PathIn (appEndo segs [] ++ path)
+
+mkLinkNext :: forall r next in_ proxy proxy'. HasLink next => proxy (r next) -> proxy' in_ -> Endo PathSegments -> MkLink in_ next
+mkLinkNext _ = mkLink (Proxy :: Proxy next)
+
+fieldLink :: forall r a. HasLink a => (r -> a) -> MkLink r a
+fieldLink _ = mkLink (Proxy :: Proxy a) (Proxy :: Proxy r) mempty
+
+rootLink :: forall a proxy. HasLink a => proxy a -> MkLink () a
+rootLink _ = mkLink (Proxy :: Proxy a) (Proxy :: Proxy ()) mempty
 
 type a :> b = a b
 infixr 2 :>
@@ -92,6 +120,10 @@ instance Router (End state) where
   type RouteState (End state) = state
   tryRoute segs = endComponent <$ guard (null segs)
 
+instance HasLink (End state) where
+  type MkLink in_ (End state) = PathIn in_
+  mkLink _ _ segs = PathIn (appEndo segs [])
+
 instance Abbreviated (End state) where
   type Brief (End state) = Component' state
   brief = End
@@ -107,6 +139,10 @@ instance Router next => Router (Wrap next) where
     routeNext <- tryRoute segs
     return $ \(Wrap next f) -> f (routeNext next)
 
+instance HasLink next => HasLink (Wrap next) where
+  type MkLink in_ (Wrap next) = MkLink in_ next
+  mkLink = mkLinkNext
+
 instance Abbreviated (Wrap state)
 
 newtype Seg (seg :: Symbol) next = Seg { segNext :: next }
@@ -116,6 +152,12 @@ instance (KnownSymbol seg, Router next) => Router (Seg seg next) where
   tryRoute (s : nextPath)
     | JSString.unpack s == symbolVal (Proxy :: Proxy seg) = tryRouteNext segNext nextPath
   tryRoute _ = Nothing
+
+instance (KnownSymbol seg, HasLink next) => HasLink (Seg seg next) where
+  type MkLink in_ (Seg seg next) = MkLink in_ next
+  mkLink pr pin_ segs = mkLinkNext pr pin_ (segs <> Endo (seg:))
+    where
+      seg = JSString.pack (symbolVal (Proxy :: Proxy seg))
 
 instance Abbreviated next => Abbreviated (Seg seg next) where
   type Brief (Seg seg next) = Brief next
@@ -132,13 +174,23 @@ instance Router next => Router (ZoomR out next) where
     routeNext <- tryRoute segs
     return $ \(ZoomR l next) -> zoom' l (routeNext next)
 
+instance HasLink next => HasLink (ZoomR out next) where
+  type MkLink in_ (ZoomR out next) = MkLink in_ next
+  mkLink = mkLinkNext
+
 instance Abbreviated next => Abbreviated (ZoomR out next)
 
 class FromSegment a where
   fromSegment :: JSString.JSString -> Maybe a
 
+class ToSegment a where
+  toSegment :: a -> JSString.JSString
+
 instance FromSegment JSString.JSString where
   fromSegment = Just
+
+instance ToSegment JSString.JSString where
+  toSegment = id
 
 newtype Capture a next = Capture { captureNext :: a -> next }
 
@@ -147,6 +199,10 @@ instance (FromSegment a, Router next) => Router (Capture a next) where
   tryRoute (s : segs)
     | Just segVal <- fromSegment s = tryRouteNext (\(Capture next) -> next segVal) segs
   tryRoute _ = Nothing
+
+instance (ToSegment a, HasLink next) => HasLink (Capture a next) where
+  type MkLink in_ (Capture a next) = a -> MkLink in_ next
+  mkLink pr pin_ segs segVal = mkLinkNext pr pin_ (segs <> Endo (toSegment segVal:))
 
 instance Abbreviated next => Abbreviated (Capture a next) where
   type Brief (Capture a next) = a -> Brief next

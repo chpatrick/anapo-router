@@ -25,9 +25,9 @@ data NavigationItem
 
 navItemPath :: NavigationItem -> Path
 navItemPath = \case
-  Home -> "/"
-  About -> "/about"
-  Team -> "/team"
+  Home -> toPath $ fieldLink home
+  About -> toPath $ fieldLink about
+  Team -> toPath $ fieldLink team $ fieldLink teamHome
 
 navItemTitle :: NavigationItem -> T.Text
 navItemTitle = \case
@@ -60,6 +60,7 @@ data TeamRoutes = TeamRoutes
 
 instance Router TeamRoutes where
   type RouteState TeamRoutes = ()
+instance HasLink TeamRoutes
 
 data TestRoutes = TestRoutes
   { home :: End ()
@@ -69,6 +70,7 @@ data TestRoutes = TestRoutes
 
 instance Router TestRoutes where
   type RouteState TestRoutes = ()
+instance HasLink TestRoutes
 
 data TeamMember = TeamMember
   { tmName :: T.Text
@@ -117,8 +119,9 @@ testRoutes history = TestRoutes
             (class_ "col-4") $
               n$ div_
                 (class_ "list-group") $
-                  for_ teamMembers $ \( memberId, teamMember ) ->
-                    n$ historyLinkA history ("/team/" <> memberId)
+                  for_ teamMembers $ \( memberId, teamMember ) -> do
+                    let teamLink = toPath $ fieldLink team $ fieldLink teamDetail memberId
+                    n$ historyLinkA history teamLink
                       (class_ "list-group-item list-group-item-action") $
                         n$ text (tmName teamMember)
 
